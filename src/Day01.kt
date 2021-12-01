@@ -1,13 +1,13 @@
 fun main() {
     fun part1(input: List<String>): Int {
-        return input.map { it.toInt() }.zipWithNext().count { (prev, curr) ->
-            prev < curr
+        return input.map { it.toInt() }.windowed(2).count {
+            it.first() < it.last()
         }
     }
 
     fun part2(input: List<String>): Int {
-        return input.map { it.toInt() }.windowed(3).zipWithNext().count { (prev, curr) ->
-            prev[0] < curr[2]
+        return input.map { it.toInt() }.windowed(4).count {
+            it.first() < it.last()
         }
     }
 
@@ -16,6 +16,6 @@ fun main() {
     check(part2(testInput) == 5)
 
     val input = readInput("Day01_input")
-    println(part1(input))
-    println(part2(input))
+    println(part1(input)) //1154
+    println(part2(input)) //1127
 }
