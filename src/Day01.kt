@@ -6,8 +6,8 @@ fun main() {
     }
 
     fun part2(input: List<String>): Int {
-        return input.map { it.toInt() }.windowed(3) { it.sum() }.zipWithNext().count { (prev, curr) ->
-            prev < curr
+        return input.map { it.toInt() }.windowed(3).zipWithNext().count { (prev, curr) ->
+            prev[0] < curr[2]
         }
     }
 
