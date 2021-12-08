@@ -69,53 +69,60 @@ class SevenSegmentSearch(input: List<String>) {
         private val maskToDigit: Map<Int, Int> = run {
             val res = mutableMapOf<Int, Int>()
 
-            val masksGroupByLength = allPatterns.groupBy({ it.length }, { it.mask })
+            val masksFromLength = allPatterns.fold(Array(8) { mutableListOf<Int>() }) { acc, (length, mask) ->
+                acc[length].add(mask)
+                acc
+            }
             val digitToMask = mutableMapOf<Int, Int>()
 
-            fun associateDigitWith(mask: Int, digit: Int) {
+            fun associateDigitWithMask(digit: Int, mask: Int) {
                 digitToMask[digit] = mask
                 res[mask] = digit
             }
 
-            associateDigitWith(masksGroupByLength[2]!![0], 1)
-            associateDigitWith(masksGroupByLength[3]!![0], 7)
-            associateDigitWith(masksGroupByLength[4]!![0], 4)
-            associateDigitWith(masksGroupByLength[7]!![0], 8)
+            associateDigitWithMask(1, masksFromLength[2][0])
+            associateDigitWithMask(7, masksFromLength[3][0])
+            associateDigitWithMask(4, masksFromLength[4][0])
+            associateDigitWithMask(8, masksFromLength[7][0])
 
             val mask7 = digitToMask[7]!!
 
-            associateDigitWith(masksGroupByLength[5]!!.first { it and mask7 == mask7 }, 3)
+            associateDigitWithMask(3, masksFromLength[5].first { it and mask7 == mask7 })
 
             val mask3 = digitToMask[3]!!
 
-            associateDigitWith(masksGroupByLength[6]!!.first { it and mask3 == mask3 }, 9)
+            associateDigitWithMask(9, masksFromLength[6].first { it and mask3 == mask3 })
 
             val mask9 = digitToMask[9]!!
 
-            associateDigitWith(masksGroupByLength[5]!!.first { it != mask3 && it and mask9 == it }, 5)
+            associateDigitWithMask(5, masksFromLength[5].first { it != mask3 && it and mask9 == it })
 
             val mask5 = digitToMask[5]!!
 
-            associateDigitWith(masksGroupByLength[6]!!.first { it != mask9 && it and mask5 == mask5 }, 6)
+            associateDigitWithMask(6, masksFromLength[6].first { it != mask9 && it and mask5 == mask5 })
 
             val mask6 = digitToMask[6]!!
 
-            associateDigitWith(masksGroupByLength[6]!!.first { it != mask6 && it != mask9 }, 0)
-            associateDigitWith(masksGroupByLength[5]!!.first { it != mask3 && it != mask5 }, 2)
+            associateDigitWithMask(0, masksFromLength[6].first { it != mask6 && it != mask9 })
+            associateDigitWithMask(2, masksFromLength[5].first { it != mask3 && it != mask5 })
 
             res
         }
 
-        val countOf1478 = outputPatterns.count { it.length == 2 || it.length == 3 || it.length == 4 || it.length == 7 }
+        val countOf1478 = outputPatterns.count { it.is1478 }
         val value = outputPatterns.fold(0) { acc, pattern ->
             acc * 10 + maskToDigit[pattern.mask]!!
         }
 
         private class Pattern(input: String) {
+            operator fun component1() = length
+            operator fun component2() = mask
+
             val length = input.length
             val mask = input.fold(0) { acc, c ->
                 acc or (1 shl c - 'a')
             }
+            val is1478 = length == 2 || length == 3 || length == 4 || length == 7
         }
     }
 }
