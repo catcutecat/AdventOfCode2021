@@ -32,144 +32,134 @@ fun main() {
     println(part2(input)) //4687
 }
 
-class SnailfishNumber private constructor() {
+sealed class SnailfishNumber {
+    abstract val magnitude: Int
+    protected var onTransformed: (SnailfishNumber) -> Unit = { throw Exception() }
 
-    private var left: SnailfishNumber? = null
-    private var right: SnailfishNumber? = null
-    private val isRegularNumber get() = left == null
+    protected abstract fun clone(): SnailfishNumber
 
-    var magnitude: Int = 0
-        private set
+    private class PairNumber private constructor() : SnailfishNumber() {
 
-    constructor(left: SnailfishNumber, right: SnailfishNumber) : this() {
-        this.left = left
-        this.right = right
-        this.magnitude = 3 * left.magnitude + 2 * right.magnitude
-    }
+        override val magnitude: Int get() = 3 * left.magnitude + 2 * right.magnitude
 
-    constructor(magnitude: Int) : this() {
-        this.magnitude = magnitude
-    }
+        override fun clone(): SnailfishNumber = create(left.clone(), right.clone())
+        override fun toString(): String = "[$left,$right]"
 
-    override fun toString(): String {
-        return if (isRegularNumber) { "$magnitude" } else { "[$left,$right]" }
-    }
+        lateinit var left: SnailfishNumber
+            private set
+        lateinit var right: SnailfishNumber
+            private set
 
-    operator fun plus(other: SnailfishNumber): SnailfishNumber {
-        return SnailfishNumber(this.clone(), other.clone()).reduced()
-    }
-
-    private fun clone(): SnailfishNumber {
-        return if (isRegularNumber) {
-            SnailfishNumber(magnitude)
-        } else {
-            SnailfishNumber(left!!.clone(), right!!.clone())
-        }
-    }
-
-    private fun reduced(): SnailfishNumber {
-        do {
-            val numberToSplit = explode()
-        } while (split(numberToSplit))
-
-        updateMagnitude()
-        return this
-    }
-
-    private fun explode(): List<Pair<SnailfishNumber, Int>> {
-        val toSplit = mutableListOf<Pair<SnailfishNumber, Int>>()
-        fun addToSplit(number: SnailfishNumber, depth: Int) {
-            if (toSplit.isEmpty() || toSplit.last().second < 4 && toSplit.last().first != number) {
-                toSplit.add(number to depth)
-            }
+        fun explode(): ExplodeResult = ExplodeResult(RegularNumber(0), left.magnitude, right.magnitude).also {
+            onTransformed(it.regularNumber)
         }
 
-        var prevRegularNumber: SnailfishNumber? = null
-        var prevRegularNumberDepth = 0
-        var add = 0
+        data class ExplodeResult(
+            val regularNumber: RegularNumber,
+            val leftValue: Int,
+            val rightValue: Int
+        )
 
-        fun traverse(number: SnailfishNumber, depth: Int = 0) {
-            when {
-                number.isRegularNumber -> {
-                    number.magnitude += add
-                    if (number.magnitude > 9) addToSplit(number, depth)
-                    add = 0
-                    prevRegularNumber = number
-                    prevRegularNumberDepth = depth
+        companion object {
+            fun create(leftNumber: SnailfishNumber, rightNumber: SnailfishNumber) = PairNumber().apply {
+                left = leftNumber
+                right = rightNumber
+            }.apply {
+                left.onTransformed = {
+                    it.onTransformed = left.onTransformed
+                    left = it
                 }
-                depth == 4 -> {
-                    check(number.left!!.isRegularNumber)
-                    check(number.right!!.isRegularNumber)
-                    prevRegularNumber?.let {
-                        it.magnitude += number.left!!.magnitude + add
-                        if (it.magnitude > 9) addToSplit(it, prevRegularNumberDepth)
-                    }
-                    add = number.right!!.magnitude
-                    number.apply {
-                        left = null
-                        right = null
-                        magnitude = 0
-                    }
-                    prevRegularNumber = number
-                    prevRegularNumberDepth = depth
-                }
-                else -> {
-                    traverse(number.left!!, depth + 1)
-                    traverse(number.right!!, depth + 1)
+                right.onTransformed = {
+                    it.onTransformed = right.onTransformed
+                    right = it
                 }
             }
         }
-        traverse(this)
-
-        return toSplit
     }
 
-    private fun split(list: List<Pair<SnailfishNumber, Int>>): Boolean {
-        if (list.isEmpty()) {
-            return false
+    private class RegularNumber(private var value: Int) : SnailfishNumber() {
+        override val magnitude: Int get() = value
+
+        override fun clone(): SnailfishNumber = RegularNumber(value)
+        override fun toString(): String = "$value"
+
+        // return: true if it needs to stop split
+        fun split(depth: Int): Boolean {
+            if (value < 10) return false
+
+            val left = RegularNumber(value / 2)
+            val right = RegularNumber((value + 1) / 2)
+            PairNumber.create(left, right).apply(onTransformed)
+
+            return depth == MAX_DEPTH || left.split(depth + 1) || right.split(depth + 1)
         }
-        for ((num, depth) in list) {
-            if (num.split(depth)) break
-        }
-        return true
+
+        fun add(num: Int) = run { value += num }
     }
 
-    private fun split(depth: Int): Boolean {
-        if (magnitude < 10) return false
-        left = SnailfishNumber(magnitude / 2)
-        right = SnailfishNumber((magnitude + 1) / 2)
-        updateMagnitude()
-        return depth == 4 || left!!.split(depth + 1) || right!!.split(depth + 1)
-    }
-
-    private fun updateMagnitude() {
-        if (!isRegularNumber) {
-            left!!.updateMagnitude()
-            right!!.updateMagnitude()
-            magnitude = 3 * left!!.magnitude + 2 * right!!.magnitude
-        }
-    }
+    operator fun plus(other: SnailfishNumber): SnailfishNumber =
+        generateSequence(PairNumber.create(this.clone(), other.clone()), (::reduce)).last()
 
     companion object {
+        private const val MAX_DEPTH = 4
+
         fun fromString(string: String): SnailfishNumber {
-            return build(string, 0).first
+            var i = 0
+            fun parse(): SnailfishNumber {
+                return if (string[i] == '[') {
+                    ++i
+                    val left = parse().also { check(string[i++] == ',') }
+                    val right = parse().also { check(string[i++] == ']') }
+                    PairNumber.create(left, right)
+                } else {
+                    var value = 0
+                    while (string[i] in '0'..'9') {
+                        value = value * 10 + (string[i++] - '0')
+                    }
+                    RegularNumber(value)
+                }
+            }
+            return parse().also { check(i == string.length) }
         }
 
-        private fun build(string: String, index: Int): Pair<SnailfishNumber, Int> {
-            var i = index
-            while (string[i] == ',' || string[i] == ']') ++i
-            return if (string[i] == '[') {
-                val (leftNum, j) = build(string, i + 1)
-                val (rightNum, k) = build(string, j)
-                return SnailfishNumber(leftNum, rightNum) to k
-            } else {
-                var magnitude = 0
-                while (string[i] in '0'..'9') {
-                    magnitude = magnitude * 10 + (string[i] - '0')
-                    ++i
-                }
-                SnailfishNumber(magnitude) to i
+        private fun reduce(number: SnailfishNumber): SnailfishNumber? {
+            val splitList = mutableListOf<Pair<RegularNumber, Int>>()
+            var prevRegularNumber: Pair<RegularNumber, Int>? = null
+            var toAdd = 0
+
+            fun updatePrevRegularNumber(number: RegularNumber, depth: Int) {
+                prevRegularNumber?.takeIf { it.first.magnitude > 9 }?.let { splitList.add(it) }
+                prevRegularNumber = number to depth
             }
+
+            fun traverse(number: SnailfishNumber, depth: Int) {
+                when (number) {
+                    is RegularNumber -> {
+                        number.add(toAdd)
+                        updatePrevRegularNumber(number, depth)
+                        toAdd = 0
+                    }
+
+                    is PairNumber -> {
+                        if (depth == MAX_DEPTH) {
+                            val (regularNumber, left, right) = number.explode()
+                            prevRegularNumber?.first?.add(left + toAdd)
+                            updatePrevRegularNumber(regularNumber, depth)
+                            toAdd = right
+                        } else {
+                            traverse(number.left, depth + 1)
+                            traverse(number.right, depth + 1)
+                        }
+                    }
+                }
+            }
+            traverse(number, 0)
+            prevRegularNumber?.takeIf { it.first.magnitude > 9 }?.let { splitList.add(it) }
+
+            for ((num, depth) in splitList) {
+                if (num.split(depth)) return number
+            }
+            return if (splitList.isEmpty()) null else number
         }
     }
 }
