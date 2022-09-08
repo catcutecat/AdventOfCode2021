@@ -33,32 +33,38 @@ fun main() {
 }
 
 sealed class SnailfishNumber {
-    abstract val magnitude: Int
     protected var onTransformed: (SnailfishNumber) -> Unit = { throw Exception() }
 
-    protected abstract fun clone(): SnailfishNumber
+    val magnitude: Int
+        get() = when (this) {
+            is PairNumber -> 3 * left.magnitude + 2 * right.magnitude
+            is RegularNumber -> value
+        }
+
+    override fun toString() = when (this) {
+        is PairNumber -> "[$left,$right]"
+        is RegularNumber -> "$value"
+    }
+
+    private fun clone(): SnailfishNumber = when (this) {
+        is PairNumber -> PairNumber.create(left.clone(), right.clone())
+        is RegularNumber -> RegularNumber(value)
+    }
+
+    operator fun plus(other: SnailfishNumber): SnailfishNumber =
+        generateSequence(PairNumber.create(this.clone(), other.clone()), (::reduce)).last()
 
     private class PairNumber private constructor() : SnailfishNumber() {
-
-        override val magnitude: Int get() = 3 * left.magnitude + 2 * right.magnitude
-
-        override fun clone(): SnailfishNumber = create(left.clone(), right.clone())
-        override fun toString(): String = "[$left,$right]"
-
         lateinit var left: SnailfishNumber
             private set
         lateinit var right: SnailfishNumber
             private set
 
-        fun explode(): ExplodeResult = ExplodeResult(RegularNumber(0), left.magnitude, right.magnitude).also {
+        fun explode() = ExplodeResult(RegularNumber(0), left.magnitude, right.magnitude).also {
             onTransformed(it.regularNumber)
         }
 
-        data class ExplodeResult(
-            val regularNumber: RegularNumber,
-            val leftValue: Int,
-            val rightValue: Int
-        )
+        data class ExplodeResult(val regularNumber: RegularNumber, val leftValue: Int, val rightValue: Int)
 
         companion object {
             fun create(leftNumber: SnailfishNumber, rightNumber: SnailfishNumber) = PairNumber().apply {
@@ -66,39 +72,30 @@ sealed class SnailfishNumber {
                 right = rightNumber
             }.apply {
                 left.onTransformed = {
-                    it.onTransformed = left.onTransformed
-                    left = it
+                    left = it.also { it.onTransformed = left.onTransformed }
                 }
                 right.onTransformed = {
-                    it.onTransformed = right.onTransformed
-                    right = it
+                    right = it.also { it.onTransformed = right.onTransformed }
                 }
             }
         }
     }
 
-    private class RegularNumber(private var value: Int) : SnailfishNumber() {
-        override val magnitude: Int get() = value
-
-        override fun clone(): SnailfishNumber = RegularNumber(value)
-        override fun toString(): String = "$value"
+    private class RegularNumber(value: Int) : SnailfishNumber() {
+        var value = value
+            private set
 
         // return: true if it needs to stop split
         fun split(depth: Int): Boolean {
             if (value < 10) return false
-
             val left = RegularNumber(value / 2)
             val right = RegularNumber((value + 1) / 2)
-            PairNumber.create(left, right).apply(onTransformed)
-
+            onTransformed(PairNumber.create(left, right))
             return depth == MAX_DEPTH || left.split(depth + 1) || right.split(depth + 1)
         }
 
         fun add(num: Int) = run { value += num }
     }
-
-    operator fun plus(other: SnailfishNumber): SnailfishNumber =
-        generateSequence(PairNumber.create(this.clone(), other.clone()), (::reduce)).last()
 
     companion object {
         private const val MAX_DEPTH = 4
@@ -156,10 +153,7 @@ sealed class SnailfishNumber {
             traverse(number, 0)
             prevRegularNumber?.takeIf { it.first.magnitude > 9 }?.let { splitList.add(it) }
 
-            for ((num, depth) in splitList) {
-                if (num.split(depth)) return number
-            }
-            return if (splitList.isEmpty()) null else number
+            return number.takeIf { splitList.any { (num, depth) -> num.split(depth) } || splitList.isNotEmpty() }
         }
     }
 }
